@@ -24,7 +24,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -87,6 +89,19 @@ public class FilePath extends CordovaPlugin {
             }
             return false;
         }
+        if(action.equals("getFileFromContentUri")) {
+            try {
+                getFileFromContentUri();
+            } catch (IOException e) {
+                JSONObject resultObj = new JSONObject();
+
+                resultObj.put("code", "0");
+                resultObj.put("message", e.getMessage());
+
+                this.callback.error(resultObj);
+            }
+            return false;
+        }
         if (action.equals("resolveNativePath")) {
             if (PermissionHelper.hasPermission(this, READ)) {
                 resolveNativePath();
@@ -99,7 +114,7 @@ public class FilePath extends CordovaPlugin {
         }
         else {
             JSONObject resultObj = new JSONObject();
-            
+
             resultObj.put("code", INVALID_ACTION_ERROR_CODE);
             resultObj.put("message", "Invalid action.");
 
@@ -107,6 +122,54 @@ public class FilePath extends CordovaPlugin {
         }
 
         return false;
+    }
+
+    public void getFileFromContentUri() throws IOException {
+        Context context = this.cordova.getActivity().getApplicationContext();
+        Uri uri = Uri.parse(this.uriStr);
+
+        // Cleanup
+        File[] files = context.getCacheDir().listFiles();
+        for(File f : files) {
+            if(f.getName().startsWith("temp_")) {
+                f.delete();
+            }
+        }
+
+        File f = new File(context.getCacheDir() + "/temp_" + String.valueOf(System.currentTimeMillis()));
+        InputStream is = context.getContentResolver().openInputStream(uri);
+        BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(f));
+        int nRead;
+        byte[] data = new byte[1024];
+        while ((nRead = is.read(data, 0, data.length)) != -1) {
+            bos.write(data, 0, nRead);
+        }
+
+        bos.flush();
+
+        JSONObject successObj = new JSONObject();
+        try {
+            successObj.put("filename", getFilename(context, uri));
+            successObj.put("tempfilename", f.getAbsolutePath());
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        this.callback.success(successObj);
+    }
+
+    private String getFilename(Context context, Uri uri) {
+        String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME};
+        Cursor metaCursor = context.getContentResolver().query(uri, projection, null, null, null);
+        if (metaCursor != null) {
+            try {
+                if (metaCursor.moveToFirst()) {
+                    return metaCursor.getString(0);
+                }
+            } finally {
+                metaCursor.close();
+            }
+        }
+        return "";
     }
 
     public void getArrayBufferFromContentUri() throws IOException {
@@ -122,18 +185,8 @@ public class FilePath extends CordovaPlugin {
 
         buffer.flush();
         byte[] byteArray = buffer.toByteArray();
-        String fileName = "";
-        String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME};
-        Cursor metaCursor = context.getContentResolver().query(uri, projection, null, null, null);
-        if (metaCursor != null) {
-            try {
-                if (metaCursor.moveToFirst()) {
-                    fileName = metaCursor.getString(0);
-                }
-            } finally {
-                metaCursor.close();
-            }
-        }
+        String fileName = getFilename(context, uri);
+
         JSONObject successObj = new JSONObject();
         try {
             successObj.put("filename", fileName);
@@ -173,19 +226,19 @@ public class FilePath extends CordovaPlugin {
             this.callback.success("file://" + filePath);
         }
     }
-    
+
     public void onRequestPermissionResult(int requestCode, String[] permissions, int[] grantResults) throws JSONException {
         for (int r:grantResults) {
             if (r == PackageManager.PERMISSION_DENIED) {
                 JSONObject resultObj = new JSONObject();
                 resultObj.put("code", 3);
                 resultObj.put("message", "Filesystem permission was denied.");
-                
+
                 this.callback.error(resultObj);
                 return;
             }
         }
-        
+
         if (requestCode == READ_REQ_CODE) {
             resolveNativePath();
         }
@@ -393,13 +446,13 @@ public class FilePath extends CordovaPlugin {
                     }
                 } finally {
                     if (cursor != null)
-                    cursor.close();
+                        cursor.close();
                 }
                 //
                 final String id = DocumentsContract.getDocumentId(uri);
                 try {
                     final Uri contentUri = ContentUris.withAppendedId(
-                        Uri.parse("content://downloads/public_downloads"), Long.valueOf(id));
+                            Uri.parse("content://downloads/public_downloads"), Long.valueOf(id));
 
                     return getDataColumn(context, contentUri, null, null);
                 } catch(NumberFormatException e) {
