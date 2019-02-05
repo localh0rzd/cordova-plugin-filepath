@@ -14,6 +14,7 @@ import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
+import android.webkit.MimeTypeMap;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -158,12 +159,17 @@ public class FilePath extends CordovaPlugin {
     }
 
     private String getFilename(Context context, Uri uri) {
-        String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME};
+        String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.TITLE, MediaStore.MediaColumns.MIME_TYPE};
         Cursor metaCursor = context.getContentResolver().query(uri, projection, null, null, null);
         if (metaCursor != null) {
             try {
                 if (metaCursor.moveToFirst()) {
-                    return metaCursor.getString(0);
+                    String filename = metaCursor.getString(0);
+                    if(filename == null) {
+                        filename = metaCursor.getString(1) + "." + MimeTypeMap.getSingleton()
+                                .getExtensionFromMimeType(metaCursor.getString(2));
+                    }
+                    return filename;
                 }
             } finally {
                 metaCursor.close();
