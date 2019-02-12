@@ -32,6 +32,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.io.File;
 
@@ -159,15 +160,19 @@ public class FilePath extends CordovaPlugin {
     }
 
     private String getFilename(Context context, Uri uri) {
-        String[] projection = {MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.TITLE, MediaStore.MediaColumns.MIME_TYPE};
-        Cursor metaCursor = context.getContentResolver().query(uri, projection, null, null, null);
+        Cursor metaCursor = context.getContentResolver().query(uri, null, null, null, null);
         if (metaCursor != null) {
-            try {
+            try{
                 if (metaCursor.moveToFirst()) {
-                    String filename = metaCursor.getString(0);
-                    if(filename == null) {
-                        filename = metaCursor.getString(1) + "." + MimeTypeMap.getSingleton()
-                                .getExtensionFromMimeType(metaCursor.getString(2));
+                    String filename = metaCursor.getString(metaCursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME));
+                    // Query by title and mime type if there is no display name
+                    if (filename == null) {
+                        int titleIndex = metaCursor.getColumnIndex(MediaStore.MediaColumns.TITLE);
+                        int mimeIndex = metaCursor.getColumnIndex(MediaStore.MediaColumns.MIME_TYPE);
+                        if(titleIndex != -1 && mimeIndex != -1){
+                            filename = metaCursor.getString(titleIndex) + "." + MimeTypeMap.getSingleton()
+                                    .getExtensionFromMimeType(metaCursor.getString(mimeIndex));
+                        }
                     }
                     return filename;
                 }
